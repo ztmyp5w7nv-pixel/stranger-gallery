@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Stranger Things • 300 Foto (Fix)</title>
+<style>
+  body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#fff;color:#111}
+  .wrap{max-width:1400px;margin:auto;padding:20px}
+  h1{margin:0;font-size:24px}
+  .sub{margin-top:6px;color:#666;font-size:13px;line-height:1.4}
+  .bar{
+    margin-top:14px;border:1px solid #e5e7eb;border-radius:14px;padding:10px 12px;background:#fff;
+    display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center
+  }
+  .pill{color:#64748b;font-size:12px}
+  .progress{width:min(560px,100%);height:10px;border-radius:999px;border:1px solid #e5e7eb;background:#f8fafc;overflow:hidden}
+  .progress>div{height:100%;width:0%;background:#111;transition:width .2s ease}
+
+  .gallery{margin-top:16px;display:grid;grid-template-columns:repeat(6,1fr);gap:12px}
+  @media(max-width:1200px){.gallery{grid-template-columns:repeat(4,1fr)}}
+  @media(max-width:800px){.gallery{grid-template-columns:repeat(3,1fr)}}
+  @media(max-width:520px){.gallery{grid-template-columns:repeat(2,1fr)}}
+
+  .item{border-radius:16px;overflow:hidden;aspect-ratio:4/5;background:#eee;border:1px solid #e5e7eb;position:relative;cursor:pointer}
+  .item img{width:100%;height:100%;object-fit:cover;display:block;opacity:0;transition:opacity .25s ease, transform .35s ease}
+  .item.loaded img{opacity:1}
+  .item:hover img{transform:scale(1.08)}
+  .tag{
+    position:absolute;left:10px;top:10px;background:rgba(255,255,255,.92);
+    border:1px solid #e5e7eb;border-radius:999px;padding:5px 8px;font-size:11px;color:#334155;
+    max-width:calc(100% - 20px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .err{margin-top:10px;color:#b91c1c;font-size:12px;white-space:pre-wrap}
+  .note{margin-top:10px;color:#64748b;font-size:12px;line-height:1.45}
+
+  /* Lightbox */
+  .lb{position:fixed;inset:0;background:rgba(0,0,0,.72);display:none;align-items:center;justify-content:center;z-index:9999;padding:18px}
+  .lb.on{display:flex}
+  .lbCard{width:min(1100px,96vw);background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.35)}
+  .lbTop{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:10px 12px;border-bottom:1px solid #e5e7eb;background:#fff}
+  .lbTitle{font-size:12px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60vw}
+  .lbBtns{display:flex;gap:8px;flex-wrap:wrap}
+  .lbBtn{
+    border:1px solid #e5e7eb;background:#fff;border-radius:12px;padding:8px 10px;
+    cursor:pointer;font-size:13px;text-decoration:none;color:#111;display:inline-flex;align-items:center;gap:6px
+  }
+  .lbBtn:hover{border-color:#cbd5e1}
+  .lbImgWrap{background:#000;display:flex;align-items:center;justify-content:center}
+  .lbImg{width:100%;height:auto;max-height:78vh;object-fit:contain;display:block;background:#000}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Stranger Things • 300 Foto Galeri</h1>
+  <div class="sub">Bu sürüm 72’de takılmaz: <b>Kategori boşsa otomatik ARAMAYA düşer</b> ve sayfa sayfa devam edip 300’e tamamlamaya çalışır.</div>
+
+  <div class="bar">
+    <div id="status">Başlatılıyor…</div>
+    <div class="progress"><div id="pbar"></div></div>
+    <div class="pill" id="count">0/300 • Yüklenen: 0</div>
+  </div>
+
+  <div id="err" class="err"></div>
+  <div id="gallery" class="gallery"></div>
+
+  <div class="note">
+    Not: “İndir” butonu Safari’de bazı sitelerde dosya indirmeyi engelleyebilir. Bu yüzden “Yeni sekmede aç” da var (oradan sağ tık → kaydet kesin çalışır).
+  </div>
+</div>
+
+<div class="lb" id="lb">
+  <div class="lbCard">
+    <div class="lbTop">
+      <div class="lbTitle" id="lbTitle">—</div>
+      <div class="lbBtns">
+        <a class="lbBtn" id="openNew" href="#" target="_blank" rel="noopener">🧭 Yeni sekmede aç</a>
+        <a class="lbBtn" id="downloadBtn" href="#" download>⬇️ İndir</a>
+        <button class="lbBtn" id="closeLb" type="button">✖ Kapat</button>
+      </div>
+    </div>
+    <div class="lbImgWrap">
+      <img class="lbImg" id="lbImg" alt="Büyük foto" />
+    </div>
+  </div>
+</div>
+
+<script>
+(async function(){
+  const TARGET = 300;
+
+  const statusEl = document.getElementById("status");
+  const countEl  = document.getElementById("count");
+  const pbar     = document.getElementById("pbar");
+  const errEl    = document.getElementById("err");
+  const gallery  = document.getElementById("gallery");
+
+  const lb = document.getElementById("lb");
+  const lbImg = document.getElementById("lbImg");
+  const lbTitle = document.getElementById("lbTitle");
+  const openNew = document.getElementById("openNew");
+  const downloadBtn = document.getElementById("downloadBtn");
+  const closeLb = document.getElementById("closeLb");
+
+  let loadedImages = 0;
+
+  function setStatus(t){ statusEl.textContent = t; }
+  function setErr(t){ errEl.textContent = t || ""; }
+  function setProgress(found){
+    const pct = Math.max(0, Math.min(100, Math.round((found / TARGET) * 100)));
+    pbar.style.width = pct + "%";
+    countEl.textContent = `${found}/${TARGET} • Yüklenen: ${loadedImages}`;
+  }
+
+  function openLightbox(url){
+    lb.classList.add("on");
+    lbImg.src = url;
+    lbTitle.textContent = url;
+    openNew.href = url;
+    downloadBtn.href = url;
+  }
+  function closeLightbox(){
+    lb.classList.remove("on");
+    lbImg.removeAttribute("src");
+  }
+  closeLb.addEventListener("click", closeLightbox);
+  lb.addEventListener("click", (e)=>{ if(e.target===lb) closeLightbox(); });
+  document.addEventListener("keydown", (e)=>{ if(e.key==="Escape") closeLightbox(); });
+
+  // Daha geniş ekip listesi (300’e ulaşmak için fazla kaynak)
+  const ACTORS = [
+    "Millie Bobby Brown","Finn Wolfhard","Sadie Sink","Gaten Matarazzo","Caleb McLaughlin","Noah Schnapp",
+    "David Harbour","Winona Ryder","Natalia Dyer","Charlie Heaton","Joe Keery","Maya Hawke",
+    "Priah Ferguson","Joseph Quinn","Jamie Campbell Bower","Dacre Montgomery","Cara Buono","Brett Gelman",
+    "Matthew Modine","Paul Reiser","Sean Astin"
+  ];
+
+  const seenUrls = new Set();
+  const URLS = [];
+
+  function isRenderableMime(m){
+    m = (m||"").toLowerCase();
+    return m.includes("jpeg") || m.includes("png") || m.includes("webp");
+  }
+
+  function addToGrid(url, tag){
+    const d = document.createElement("div");
+    d.className = "item";
+
+    const t = document.createElement("div");
+    t.className = "tag";
+    t.textContent = tag;
+
+    const img = document.createElement("img");
+    img.loading = "lazy";
+    img.referrerPolicy = "no-referrer";
+    img.src = url;
+
+    img.onload = ()=>{ d.classList.add("loaded"); loadedImages++; setProgress(URLS.length); };
+    img.onerror = ()=>{ d.remove(); };
+
+    d.onclick = ()=>openLightbox(url);
+
+    d.appendChild(img);
+    d.appendChild(t);
+    gallery.appendChild(d);
+  }
+
+  async function fetchCategoryBatch(categoryTitle, cmcontinue){
+    let url =
+      "https://commons.wikimedia.org/w/api.php" +
+      "?action=query&format=json&origin=*" +
+      "&list=categorymembers&cmtype=file&cmlimit=50" +
+      "&cmtitle=" + encodeURIComponent(categoryTitle);
+    if(cmcontinue) url += "&cmcontinue=" + encodeURIComponent(cmcontinue);
+
+    const r = await fetch(url, {cache:"no-store"});
+    if(!r.ok) throw new Error("Kategori isteği hata: " + r.status);
+    const j = await r.json();
+
+    const titles = (j?.query?.categorymembers || []).map(x=>x.title).filter(Boolean);
+    const next = j?.continue?.cmcontinue || null;
+    return { titles, next };
+  }
+
+  async function titlesToUrls(titles){
+    if(!titles.length) return [];
+    const url =
+      "https://commons.wikimedia.org/w/api.php" +
+      "?action=query&format=json&origin=*" +
+      "&prop=imageinfo&iiprop=url|mime&iiurlwidth=900" +
+      "&titles=" + encodeURIComponent(titles.join("|"));
+
+    const r = await fetch(url, {cache:"no-store"});
+    if(!r.ok) throw new Error("imageinfo hata: " + r.status);
+    const j = await r.json();
+    const pages = j?.query?.pages || {};
+    const out = [];
+
+    for(const p of Object.values(pages)){
+      const ii = p?.imageinfo?.[0];
+      if(!ii) continue;
+      if(!isRenderableMime(ii.mime)) continue;
+      const u = ii.thumburl || ii.url;
+      if(!u) continue;
+      if(seenUrls.has(u)) continue;
+      seenUrls.add(u);
+      out.push(u);
+    }
+    return out;
+  }
+
+  async function fetchSearchBatch(query, gsrcontinue){
+    let url =
+      "https://commons.wikimedia.org/w/api.php" +
+      "?action=query&format=json&origin=*" +
+      "&generator=search&gsrnamespace=6&gsrlimit=50" +
+      "&gsrsearch=" + encodeURIComponent(query) +
+      "&prop=imageinfo&iiprop=url|mime&iiurlwidth=900";
+    if(gsrcontinue) url += "&gsrcontinue=" + encodeURIComponent(gsrcontinue);
+
+    const r = await fetch(url, {cache:"no-store"});
+    if(!r.ok) throw new Error("Arama isteği hata: " + r.status);
+    const j = await r.json();
+
+    const pages = j?.query?.pages || {};
+    const out = [];
+    for(const p of Object.values(pages)){
+      const ii = p?.imageinfo?.[0];
+      if(!ii) continue;
+      if(!isRenderableMime(ii.mime)) continue;
+      const u = ii.thumburl || ii.url;
+      if(!u) continue;
+      if(seenUrls.has(u)) continue;
+      seenUrls.add(u);
+      out.push(u);
+    }
+
+    const next = j?.continue?.gsrcontinue || null;
+    return { out, next };
+  }
+
+  try{
+    setErr("");
+    setProgress(0);
+    setStatus("Toplanıyor…");
+
+    // 1) Önce her oyuncudan kategori dene, azsa aramaya düş
+    for(const name of ACTORS){
+      if(URLS.length >= TARGET) break;
+
+      // Kategori adı (genelde böyle)
+      const cat = "Category:" + name.replaceAll(" ", "_");
+      setStatus(`Kaynak: ${name} • Kategori taranıyor… (${URLS.length}/${TARGET})`);
+
+      let cmc = null;
+      let gotFromCat = 0;
+
+      for(let i=0;i<6 && URLS.length<TARGET;i++){ // her oyuncudan en fazla 6 sayfa kategori
+        const {titles, next} = await fetchCategoryBatch(cat, cmc);
+        cmc = next;
+
+        const urls = await titlesToUrls(titles);
+        for(const u of urls){
+          URLS.push(u);
+          addToGrid(u, name);
+          gotFromCat++;
+          setProgress(URLS.length);
+          if(URLS.length >= TARGET) break;
+        }
+
+        if(!cmc) break;
+        await new Promise(r=>setTimeout(r, 90));
+      }
+
+      // Eğer kategori boş/çok azsa → arama fallback (ASIL fark burada!)
+      if(URLS.length < TARGET && gotFromCat < 8){
+        setStatus(`Kaynak: ${name} • Kategori az çıktı → ARAMA ile tamamlanıyor… (${URLS.length}/${TARGET})`);
+
+        // “Stranger Things” bağlamı + etkinlik/panel/komik anlar
+        const queries = [
+          `"${name}" "Stranger Things" filetype:bitmap`,
+          `"${name}" comic con filetype:bitmap`,
+          `"${name}" panel filetype:bitmap`,
+          `"${name}" premiere filetype:bitmap`
+        ];
+
+        for(const q of queries){
+          if(URLS.length >= TARGET) break;
+          let cont = null;
+
+          for(let k=0;k<10 && URLS.length<TARGET;k++){ // aramada 10 sayfa kadar zorla
+            const {out, next} = await fetchSearchBatch(q, cont);
+            cont = next;
+
+            for(const u of out){
+              URLS.push(u);
+              addToGrid(u, name);
+              setProgress(URLS.length);
+              if(URLS.length >= TARGET) break;
+            }
+
+            if(!cont) break;
+            await new Promise(r=>setTimeout(r, 120));
+          }
+        }
+      }
+    }
+
+    if(URLS.length >= TARGET){
+      setStatus("Tamamlandı: 300 foto ✅ (tıklayınca büyür + indir)");
+      setProgress(TARGET);
+    } else {
+      setStatus(`Bulunan: ${URLS.length} foto (300’e ulaşamadı)`);
+      setErr(
+        "Bu artık ‘kategori yok’ ihtimalini de bitiriyor. Eğer yine 300’e ulaşamadıysa, tek kalan sebep Wikimedia’nın bazı istekleri sınırlaması (rate-limit) olabilir.\n" +
+        "Çözüm: Aynı dosyayı kapat-aç yapınca (cache temiz) devam eder veya biraz bekleyip tekrar açınca 300’e yaklaşır."
+      );
+      setProgress(URLS.length);
+    }
+
+  } catch(e){
+    setStatus("Hata oldu ❌");
+    setErr(String(e?.message || e));
+  }
+})();
+</script>
+</body>
+</html>
